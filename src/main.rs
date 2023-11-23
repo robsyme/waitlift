@@ -3,11 +3,10 @@ use fs_extra::dir::get_size;
 use futures::future::TryJoinAll;
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use std::cmp;
-use std::fs::{create_dir_all, rename};
 use std::ops::Range;
 use std::path::PathBuf;
 use std::time::Instant;
-use tokio::fs::File;
+use tokio::fs::{create_dir_all, rename, File};
 use tokio::io::{self, AsyncWriteExt};
 
 #[tokio::main]
@@ -57,7 +56,7 @@ async fn main() -> io::Result<()> {
         let destination = matches.get_one::<PathBuf>("destination").unwrap();
         println!("Moving files from {:?} to {:?}", source, destination);
         let before = Instant::now();
-        match rename(source, destination) {
+        match rename(source, destination).await {
             Ok(_) => {
                 let after = Instant::now();
                 let folder_size = get_size(destination).unwrap();
@@ -73,21 +72,21 @@ async fn main() -> io::Result<()> {
     }
 
     if let Some(matches) = matches.subcommand_matches("make") {
-        let num_bytes = matches.get_one::<usize>("size").unwrap();
+        let num_megabytes = matches.get_one::<usize>("size").unwrap();
         let num = matches.get_one::<usize>("num").unwrap();
         let default_path = PathBuf::from("data");
         let dirname = matches
             .get_one::<PathBuf>("dirname")
             .unwrap_or(&default_path);
 
-        create_dir_all(dirname)?;
-        println!("Making {} files of size {} MB", num, num_bytes);
+        create_dir_all(dirname).await?;
+        println!("Making {} files of size {} MB", num, num_megabytes);
         let before: Instant = Instant::now();
         let handlers = Range {
             start: 1,
             end: *num,
         }
-        .map(|i| tokio::spawn(write_bytes(i, *num_bytes)))
+        .map(|i| tokio::spawn(write_bytes(i, *num_megabytes)))
         .collect::<Vec<_>>();
 
         let handle = handlers.into_iter().collect::<TryJoinAll<_>>().await;
